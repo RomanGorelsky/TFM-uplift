@@ -1,0 +1,9 @@
+results/
+data/
+models/
+slurm/logs/*
+!slurm/logs/.gitkeep
+__pycache__/
+*.pyc
+.tabpfn_token
+.DS_Store

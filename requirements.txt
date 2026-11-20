@@ -1,0 +1,8 @@
+tabpfn==10.2.0
+causalpfn==0.1.5
+scikit-uplift==0.5.1
+lightgbm>=4.4
+scikit-learn>=1.5.2
+pandas
+numpy
+matplotlib
