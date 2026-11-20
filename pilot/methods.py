@@ -34,6 +34,42 @@ def lgbm_s(y, T, X, X_test, seed=0, **kw):
     m = _lgbm(seed).fit(np.column_stack([T, X]), y)
     return _s_diff(m, X_test)
 
+
+# Tuned LightGBM: random search (20 settings, 3-fold CV, log-loss) for each outcome model,
+# on the training rows only. Tuning the outcome models is the standard practice for
+# meta-learners; there is no uplift label to tune on directly.
+SEARCH_SPACE = {
+    "n_estimators": [100, 200, 400, 800],
+    "learning_rate": [0.01, 0.03, 0.05, 0.1],
+    "num_leaves": [7, 15, 31, 63],
+    "min_child_samples": [20, 50, 100, 200],
+    "subsample": [0.6, 0.8, 1.0],
+    "colsample_bytree": [0.6, 0.8, 1.0],
+    "reg_lambda": [0.0, 1.0, 10.0],
+}
+
+
+def _lgbm_tuned(X, y, seed, n_iter=20):
+    from lightgbm import LGBMClassifier
+    from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+
+    base = LGBMClassifier(subsample_freq=1, random_state=seed, verbose=-1, n_jobs=1)
+    search = RandomizedSearchCV(base, SEARCH_SPACE, n_iter=n_iter, scoring="neg_log_loss",
+                                cv=StratifiedKFold(3, shuffle=True, random_state=seed),
+                                random_state=seed, n_jobs=-1, refit=True)
+    return search.fit(X, y).best_estimator_
+
+
+def lgbm_t_tuned(y, T, X, X_test, seed=0, **kw):
+    m1 = _lgbm_tuned(X[T == 1], y[T == 1], seed)
+    m0 = _lgbm_tuned(X[T == 0], y[T == 0], seed)
+    return m1.predict_proba(X_test)[:, 1] - m0.predict_proba(X_test)[:, 1]
+
+
+def lgbm_s_tuned(y, T, X, X_test, seed=0, **kw):
+    m = _lgbm_tuned(np.column_stack([T, X]), y, seed)
+    return _s_diff(m, X_test)
+
 # ---------------------------------------------------------------- TabPFN
 
 def _tabpfn(seed, device):
@@ -76,6 +112,8 @@ REGISTRY = {
     "random": random_scores,
     "lgbm_t": lgbm_t,
     "lgbm_s": lgbm_s,
+    "lgbm_t_tuned": lgbm_t_tuned,
+    "lgbm_s_tuned": lgbm_s_tuned,
     "tabpfn_t": tabpfn_t,
     "tabpfn_s": tabpfn_s,
     "causalpfn": causalpfn,

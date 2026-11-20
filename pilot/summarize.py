@@ -15,7 +15,26 @@ import numpy as np
 import pandas as pd
 
 LABELS = {"random": "Random", "lgbm_t": "LightGBM T", "lgbm_s": "LightGBM S",
+          "lgbm_t_tuned": "LightGBM T (tuned)", "lgbm_s_tuned": "LightGBM S (tuned)",
           "tabpfn_t": "TabPFN T", "tabpfn_s": "TabPFN S", "causalpfn": "CausalPFN"}
+
+# Paired comparisons: same split and same training rows, so differences are not split luck.
+PAIRS = [("tabpfn_t", "lgbm_s_tuned"), ("tabpfn_t", "lgbm_t_tuned"), ("tabpfn_s", "lgbm_s_tuned"),
+         ("causalpfn", "tabpfn_t"), ("lgbm_s_tuned", "lgbm_s")]
+
+
+def paired(ok: pd.DataFrame) -> str:
+    wide = ok.pivot_table(index=["size", "seed"], columns="method", values="qini")
+    lines = ["\n### Paired comparisons (Qini, same splits)\n",
+             "| Size | A | B | Mean A − B | SD | A wins | Splits |", "|---|---|---|---|---|---|---|"]
+    for size, g in wide.groupby(level="size"):
+        for a, b in PAIRS:
+            if a in g and b in g:
+                d = (g[a] - g[b]).dropna()
+                if len(d):
+                    lines.append(f"| {size} | {LABELS[a]} | {LABELS[b]} | {d.mean():+.4f} | "
+                                 f"{d.std():.4f} | {(d > 0).sum()} | {len(d)} |")
+    return "\n".join(lines) + "\n"
 
 
 def main():
@@ -40,6 +59,7 @@ def main():
             for _, r in g.sort_values("qini", ascending=False).iterrows():
                 f.write(f"| {LABELS.get(r.method, r.method)} | {r.qini:.4f} ± {r.qini_sd:.4f} | "
                         f"{r.auuc:.4f} ± {r.auuc_sd:.4f} | {r.up10:.4f} | {r.sec:.1f} | {r.runs} |\n")
+        f.write(paired(ok))
     print((out / "summary.md").read_text())
 
     # Qini vs training size
